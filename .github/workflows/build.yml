@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # Montoya API version to compile against. Keep in step with the version Burp Suite ships.
+      MONTOYA_API_VERSION: "2026.7"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Fetch the Montoya API jar from Maven Central
+        run: |
+          curl -fsSL -o montoya-api.jar \
+            "https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/${MONTOYA_API_VERSION}/montoya-api-${MONTOYA_API_VERSION}.jar"
+
+      - name: Build and run the test suite
+        run: ./build.sh montoya-api.jar --test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AuditLens.jar
+          path: dist/AuditLens.jar

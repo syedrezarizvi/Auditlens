@@ -1,0 +1,28 @@
+plugins { id 'java' }
+
+repositories { mavenCentral() }
+
+dependencies {
+    // Pin to a specific release for reproducible builds, e.g. '2026.7'.
+    compileOnly 'net.portswigger.burp.extensions:montoya-api:+'
+    testImplementation 'net.portswigger.burp.extensions:montoya-api:+'
+}
+
+tasks.withType(JavaCompile) { options.release = 17; options.encoding = 'UTF-8' }
+
+jar {
+    archiveFileName = 'AuditLens.jar'
+    from sourceSets.main.output   // includes src/main/resources/skills
+}
+
+// Dependency-free tests (plain main classes, no JUnit needed). Keep this list in step with build.sh.
+['SelfTest', 'SmokeTest', 'ScanTest', 'SyncTest', 'ExcelTest', 'ReviewerInitTest', 'UrlCheckTest',
+ 'TriageTest', 'TriageRulesTest', 'ExcelMultiSheetTest', 'CvssTest', 'FalsePositiveTest',
+ 'LlmBackendTest', 'EvidenceHostTest', 'ReportFileNameTest'].each { n ->
+    tasks.register("run$n", JavaExec) {
+        dependsOn testClasses
+        classpath = sourceSets.test.runtimeClasspath
+        mainClass = "ollamaat.$n"
+        jvmArgs '-Djava.awt.headless=true'
+    }
+}
