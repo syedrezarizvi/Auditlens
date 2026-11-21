@@ -143,6 +143,7 @@ Selecting a row shows its description, remediation and evidence below the table.
 the highest severity. The `[AI]` prefix and letter case are ignored when matching names.
 
 **Right-click a row** for *Send to Repeater (manual analysis)* and *Re-check selected with AI*.
+The **Triage selected (AI)** button at the bottom does the same for the rows you have selected. Use it to triage a few findings without running the whole list.
 
 ## 7. AI false-positive analysis
 

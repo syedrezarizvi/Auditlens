@@ -418,6 +418,11 @@ public final class MainPanel extends JPanel {
         bottom.add(sync);
         bottom.add(importBurp);
         bottom.add(fpAnalyze);
+        // Visible per-selection action: triage only the selected rows (same as the right-click item).
+        JButton triageSelected = new JButton("Triage selected (AI)");
+        triageSelected.setToolTipText("Run the AI false-positive check on the rows you selected only. Re-judges rows that already have a verdict.");
+        triageSelected.addActionListener(e -> reCheckSelected(table));
+        bottom.add(triageSelected);
         bottom.add(aiReview);
         bottom.add(findingsStatus);
         // Sync shortly after load (Burp's issue list is ready by then) and every 20s so passive issues show up on their own.

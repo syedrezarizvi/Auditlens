@@ -17,14 +17,19 @@ public final class TriageRulesTest {
         Triage.Verdict v = Triage.ruleVerdict("Missing Content-Security-Policy", noReq,
                 List.of("Content-Security-Policy: default-src 'self'"), "");
         fails += check(v != null && v.label().equals(Triage.FP) && v.method().equals("rule"), "CSP present in capture is a rule false positive");
-        fails += check(Triage.ruleVerdict("Missing Content-Security-Policy", noReq, List.of("Server: nginx"), "") == null,
-                "CSP absent falls through to the model (no rule verdict)");
+        Triage.Verdict cspAbsent = Triage.ruleVerdict("Missing Content-Security-Policy", noReq, List.of("Server: nginx"), "");
+        fails += check(cspAbsent != null && cspAbsent.label().equals(Triage.TP) && cspAbsent.confidence().equals("medium"),
+                "CSP absent from the captured response is a rule true positive (medium confidence)");
 
         Triage.Verdict cookie = Triage.ruleVerdict("Cookie 'sid' missing Secure/HttpOnly/SameSite", noReq,
                 List.of("Set-Cookie: sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax"), "");
         fails += check(cookie != null && cookie.label().equals(Triage.FP), "cookie carrying every reported flag is a false positive");
-        fails += check(Triage.ruleVerdict("Cookie 'sid' missing Secure/HttpOnly", noReq,
-                List.of("Set-Cookie: sid=abc; Path=/"), "") == null, "cookie missing its flags is not overturned by the rule");
+        Triage.Verdict cookieGap = Triage.ruleVerdict("Cookie 'sid' missing Secure/HttpOnly", noReq,
+                List.of("Set-Cookie: sid=abc; Path=/"), "");
+        fails += check(cookieGap != null && cookieGap.label().equals(Triage.TP) && cookieGap.rationale().contains("secure, httponly"),
+                "cookie with its flags absent from the captured Set-Cookie is a rule true positive");
+        fails += check(Triage.ruleVerdict("Cookie 'sid' missing Secure", noReq,
+                List.of("Set-Cookie: other=1"), "") == null, "cookie not in the capture goes to the model");
 
         Triage.Verdict cors = Triage.ruleVerdict("Permissive CORS policy (Access-Control-Allow-Origin: *)", noReq,
                 List.of("Access-Control-Allow-Origin: https://a.example"), "");
@@ -74,9 +79,26 @@ public final class TriageRulesTest {
         Triage.Verdict disagree = Triage.analyze(in, prompt -> prompt.contains("Argue the other side") ? fpReply : tpReply);
         fails += check(disagree.label().equals(Triage.NR), "passes that disagree become NEEDS REVIEW");
 
+        Triage.Verdict noOpp = Triage.analyze(in, prompt -> prompt.contains("Argue the other side") ? "{\"verdict\":\"needs review\",\"confidence\":\"low\",\"evidence_quote\":\"\",\"rationale\":\"no proof\"}" : tpReply);
+        fails += check(noOpp.label().equals(Triage.TP) && noOpp.method().contains("no opposing proof"),
+                "an opposing pass that finds no proof keeps the first verdict");
+
+        Triage.Input noEv = new Triage.Input("Reflected XSS", "HIGH", "https://t.example/s", "input reflected",
+                noReq, noReq, "", "(no captured request/response available; judge from the finding text and URL)\n");
+        Triage.Verdict missing = Triage.analyze(noEv, prompt -> tpReply);
+        fails += check(missing.label().equals(Triage.NR) && missing.method().equals("no evidence"),
+                "a finding with no captured traffic says so instead of a quote error");
+
         Triage.Verdict ungrounded = Triage.analyze(in, prompt -> "{\"verdict\":\"true positive\",\"confidence\":\"high\",\"evidence_quote\":\"invented text not in evidence\",\"rationale\":\"x\"}");
         fails += check(ungrounded.label().equals(Triage.NR) && ungrounded.rationale().contains("not found"),
                 "a verdict with an ungrounded quote is withheld");
+
+        Triage.Verdict unsure = Triage.analyze(in, prompt -> "{\"verdict\":\"needs review\",\"confidence\":\"medium\",\"evidence_quote\":\"Content-Type: text/html\",\"rationale\":\"x\"}");
+        fails += check(unsure.label().equals(Triage.NR) && !unsure.method().contains("quote verified") && unsure.method().contains("model unsure"),
+                "a model NEEDS REVIEW is not labelled as a verified quote");
+
+        Triage.Verdict blankConf = Triage.analyze(in, prompt -> prompt.contains("Argue the other side") ? tpReply : "{\"verdict\":\"true positive\",\"evidence_quote\":\"<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\",\"rationale\":\"x\"}");
+        fails += check(blankConf.label().equals(Triage.TP), "a missing confidence with a verified quote keeps the verdict");
 
         Triage.Verdict lowConf = Triage.analyze(in, prompt -> "{\"verdict\":\"false positive\",\"confidence\":\"low\",\"evidence_quote\":\"Content-Type: text/html\",\"rationale\":\"x\"}");
         fails += check(lowConf.label().equals(Triage.NR), "low model confidence becomes NEEDS REVIEW");

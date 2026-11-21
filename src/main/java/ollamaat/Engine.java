@@ -287,8 +287,11 @@ public final class Engine {
                     try {
                         verdict = triageOne(f);
                     } catch (Exception e) {
-                        l.event("ERROR", "triage failed for " + f.title() + ": " + e.getMessage());
-                        continue;
+                        // Record the failure on the row (and in Burp's Errors tab) so a stale verdict is never left behind.
+                        String why = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                        api.logging().logToError("AuditLens: triage failed for '" + f.title() + "' (" + f.url() + "): " + e);
+                        l.event("ERROR", "triage failed for " + f.title() + ": " + why);
+                        verdict = Triage.NR + " (AI error, " + why.replaceAll("\\s+", " ").trim() + ")";
                     }
                     memory.setTriage(f.title(), f.url(), verdict);
                     done++;
@@ -329,11 +332,20 @@ public final class Engine {
         java.util.List<String> reqH = new java.util.ArrayList<>(), respH = new java.util.ArrayList<>();
         String body = "";
         StringBuilder ev = new StringBuilder();
+        // Refs such as a3 or s1 live only in this session. After a reload they no longer resolve, so fall back to
+        // the traffic Burp itself captured for this URL. Without this, every restored finding is "no evidence".
+        java.util.List<HttpRequestResponse> found = new java.util.ArrayList<>();
         for (String ref : f.evidence()) {
-            if (ev.length() > 8000) break;
             try {
                 HttpRequestResponse rr = evidence.forFinding(ref, java.util.List.of(f.url()));
-                if (rr == null) continue;
+                if (rr != null) found.add(rr);
+            } catch (Exception ignored) { }
+        }
+        if (found.isEmpty()) found.addAll(issueMessages(f));
+        if (found.isEmpty()) found.addAll(siteMapMatches(f.url(), 3));
+        for (HttpRequestResponse rr : found) {
+            if (ev.length() > 8000) break;
+            try {
                 String reqText = Fmt.request(rr.request(), 1200, true);
                 ev.append("REQUEST:\n").append(reqText).append("\n\n");
                 if (reqH.isEmpty()) for (var h : rr.request().headers()) reqH.add(h.name() + ": " + h.value());
@@ -350,6 +362,59 @@ public final class Engine {
         }
         if (ev.length() == 0) ev.append("(no captured request/response available; judge from the finding text and URL)\n");
         return new Triage.Input(f.title(), f.severity(), f.url(), f.detail(), reqH, respH, body, ev.toString());
+    }
+
+    /**
+     * The request/response pairs Burp attached to the matching issue (same name and base URL). Imported issues keep
+     * their messages inside Burp, so this still works after the extension has been reloaded.
+     */
+    private java.util.List<HttpRequestResponse> issueMessages(Memory.Finding f) {
+        java.util.List<HttpRequestResponse> out = new java.util.ArrayList<>();
+        try {
+            for (var issue : api.siteMap().issues()) {
+                String name = issue.name() == null ? "" : issue.name().trim();
+                if (name.startsWith("[AI]")) name = name.substring(4).trim();
+                String base = issue.baseUrl() == null ? "" : issue.baseUrl();
+                if (!name.equals(f.title()) || !base.equals(f.url())) continue;
+                var rrs = issue.requestResponses();
+                if (rrs == null) continue;
+                for (var rr : rrs) {
+                    out.add(rr);
+                    if (out.size() >= 3) return out;
+                }
+                if (!out.isEmpty()) return out;
+            }
+        } catch (RuntimeException e) {
+            api.logging().logToError("AuditLens: issue lookup failed: " + e);
+        }
+        return out;
+    }
+
+    /** Captured messages from Burp's site map whose URL matches the finding's URL (query string ignored). */
+    private java.util.List<HttpRequestResponse> siteMapMatches(String url, int max) {
+        java.util.List<HttpRequestResponse> out = new java.util.ArrayList<>();
+        if (url == null || url.isBlank()) return out;
+        String want = pathOnly(url);
+        try {
+            for (HttpRequestResponse rr : api.siteMap().requestResponses()) {
+                if (out.size() >= max) break;
+                if (!rr.hasResponse() || rr.request() == null) continue;
+                if (pathOnly(rr.request().url()).equalsIgnoreCase(want)) out.add(rr);
+            }
+        } catch (RuntimeException e) {
+            api.logging().logToError("AuditLens: site map lookup failed: " + e);
+        }
+        return out;
+    }
+
+    /** URL without query string or fragment and without a trailing slash, for comparing a finding with captured traffic. */
+    private static String pathOnly(String url) {
+        String u = url.trim();
+        int cut = u.indexOf('?');
+        if (cut >= 0) u = u.substring(0, cut);
+        cut = u.indexOf('#');
+        if (cut >= 0) u = u.substring(0, cut);
+        return u.replaceAll("/+$", "");
     }
 
     /**

@@ -8,6 +8,17 @@ grouped by the development build they shipped in (`patched-vN`). The newest buil
 ### Added
 - **CAPTCHA detection (informational).** Passive analysis now notes when an HTML page protects an action with Google reCAPTCHA, hCaptcha, Cloudflare Turnstile or a generic CAPTCHA input. The finding says automated testing of that flow is limited and suggests manual testing with test accounts. AuditLens does not solve, bypass or evade CAPTCHAs.
 
+### Added
+- **Triage selected (AI)** button on the Findings tab. It runs the AI false-positive check on the selected rows only. The right-click item *Re-check selected with AI* does the same.
+
+### Fixed
+- **Most AI triage results showed NEEDS REVIEW even for clear-cut findings.** A required security header, or a cookie flag, that is provably absent from the captured response is now a deterministic rule verdict of TRUE POSITIVE (medium confidence) — the same way a header that is present is already a rule FALSE POSITIVE. These no longer go to the model, so they are instant and never hedge to NEEDS REVIEW. The model prompt was also changed to decide TRUE/FALSE POSITIVE when a quoted line shows the condition (or its absence) directly, and NEEDS REVIEW only when the evidence shows neither. The quote-verification guard still blocks invented verdicts.
+- **Reloaded findings reported "no evidence".** AuditLens kept each imported finding's captured request/response only as an in-session reference, which was lost whenever the extension was reloaded; triage then had nothing to show the model. It now falls back to the matching Burp issue's request/responses, then to the site map for the finding's URL, so triage works after a reload.
+- **A failed model call left a stale verdict with no visible error.** Triage failures now write a `NEEDS REVIEW (AI error, …)` verdict on the row and log the cause to Burp's Extensions → Errors tab.
+- **Too many AI triage results showed NEEDS REVIEW.** The adversarial second pass treated "no proof for the opposite side" as a disagreement. Now only a clear opposing verdict sends a finding to review; otherwise the first verdict stands and the method says so.
+- **Triage method labels were wrong.** A NEEDS REVIEW result from the model, a quote that didn't match, or low confidence was labelled "quote verified". Each now shows its real reason ("model unsure", "quote not verified", "low confidence"). A missing confidence with a verified quote is treated as medium, so the verdict stands.
+- **Findings with no captured traffic** now show "no evidence" with a clear reason, instead of a quote-not-found message.
+
 ### Changed
 - **Default report file name** is now `AuditLens_<project>_<yyyy-MM-dd>.html` (or `.xlsx`). The report dialog has a new "Project name" field; when it is empty, the scope's host is used, then "Project".
 - **Excel export contains only the Findings sheet.** The Cover and management summary remain in the HTML report.

@@ -73,7 +73,8 @@ public final class Triage {
     /**
      * Returns a verdict decided by a fact in the captured messages, or null when no rule applies. Rules only ever
      * return FALSE POSITIVE when the reported condition is provably absent, and NEEDS REVIEW when the element the
-     * finding is about is missing from the capture. They never return TRUE POSITIVE; that needs the model and the quote check.
+     * finding is about is missing from the capture. A required header or cookie flag that is provably absent from the
+     * captured response is a TRUE POSITIVE (medium confidence), because the capture itself shows the gap.
      */
     public static Verdict ruleVerdict(String title, List<String> requestHeaders, List<String> responseHeaders, String body) {
         if (title == null) return null;
@@ -84,7 +85,7 @@ public final class Triage {
         if (m.find()) {
             String h = m.group(1).toLowerCase(Locale.ROOT);
             if (resp.containsKey(h)) return fp("header '" + h + "' is present in the captured response");
-            return null;
+            return tp("header '" + h + "' is absent from the captured response", "medium");
         }
         if (MISSING_CLICKJACK.matcher(t).find()) {
             boolean xfo = resp.containsKey("x-frame-options");
@@ -100,11 +101,11 @@ public final class Triage {
             String line = null;
             for (String sc : setCookies) if (sc.regionMatches(true, 0, name + "=", 0, name.length() + 1)) { line = sc.toLowerCase(Locale.ROOT); break; }
             if (line == null) return null;
-            boolean all = true;
+            List<String> absent = new ArrayList<>();
             for (String flag : new String[]{"secure", "httponly", "samesite"})
-                if (missing.contains(flag) && !line.contains(flag)) all = false;
-            if (all) return fp("cookie '" + name + "' carries every flag reported missing (Set-Cookie line in the capture)");
-            return null;
+                if (missing.contains(flag) && !line.contains(flag)) absent.add(flag);
+            if (absent.isEmpty()) return fp("cookie '" + name + "' carries every flag reported missing (Set-Cookie line in the capture)");
+            return tp("cookie '" + name + "' has no " + String.join(", ", absent) + " flag (Set-Cookie line in the capture)", "medium");
         }
         if (CORS_WILDCARD.matcher(t).find()) {
             List<String> acao = resp.getOrDefault("access-control-allow-origin", List.of());
@@ -130,6 +131,7 @@ public final class Triage {
     }
 
     private static Verdict fp(String why) { return new Verdict(FP, "high", "rule", why); }
+    private static Verdict tp(String why, String confidence) { return new Verdict(TP, confidence, "rule", why); }
     private static Verdict nr(String why) { return new Verdict(NR, "", "rule", why); }
 
     static Map<String, List<String>> headerIndex(List<String> lines) {
@@ -178,30 +180,46 @@ public final class Triage {
     }
 
     /** Applies the quote and confidence rules to one model reply. */
-    static Verdict grounded(Llm llm, String evidenceText, String method) {
-        if (llm == null) return new Verdict(NR, "", method, "model gave no clear verdict");
-        if (NR.equals(llm.label())) return new Verdict(NR, llm.confidence(), method, llm.rationale());
+    static Verdict grounded(Llm llm, String evidenceText) {
+        // The method says why the result is what it is, so a NEEDS REVIEW row never claims a verified quote.
+        if (llm == null) return new Verdict(NR, "", "AI, no clear verdict", "model gave no clear verdict");
+        if (NR.equals(llm.label())) return new Verdict(NR, llm.confidence(), "AI, model unsure", llm.rationale());
         if (!quoteFound(llm.quote(), evidenceText))
-            return new Verdict(NR, llm.confidence(), method, "the quoted evidence was not found in the captured messages; verdict withheld");
-        if (llm.confidence().equals("low") || llm.confidence().isBlank())
-            return new Verdict(NR, llm.confidence(), method, llm.rationale());
-        return new Verdict(llm.label(), llm.confidence(), method, llm.rationale());
+            return new Verdict(NR, llm.confidence(), "AI, quote not verified",
+                    "the quoted evidence was not found in the captured messages; verdict withheld");
+        if (llm.confidence().equals("low"))
+            return new Verdict(NR, llm.confidence(), "AI, low confidence", llm.rationale());
+        // A missing confidence is treated as medium: the quote is verified, so the verdict stands.
+        String conf = llm.confidence().isBlank() ? "medium" : llm.confidence();
+        return new Verdict(llm.label(), conf, "AI, quote verified", llm.rationale());
     }
 
     // ------------------------------------------------------------------ stages 2-4: full pipeline
+
+    /** Marker written by the caller when a finding has no captured request or response to show the model. */
+    public static final String NO_EVIDENCE_MARKER = "(no captured request/response available";
 
     public static Verdict analyze(Input in, Chat chat) throws Exception {
         Verdict rule = ruleVerdict(in.title(), in.requestHeaders(), in.responseHeaders(), in.responseBody());
         if (rule != null) return rule;
 
+        // Without captured messages the model cannot quote anything, so no verdict can be grounded. Say why.
+        if (in.evidenceText() == null || in.evidenceText().contains(NO_EVIDENCE_MARKER))
+            return new Verdict(NR, "", "no evidence", "no captured request or response for this finding; re-capture the traffic and run the analysis again");
+
         Llm first = parse(chat.ask(prompt(in, false, null)));
-        Verdict v = grounded(first, corpus(in), "AI, quote verified");
+        Verdict v = grounded(first, corpus(in));
         if (NR.equals(v.label())) return v;
 
-        // Adversarial pass: argue the opposite side. Only agreement keeps a definite verdict.
+        // Adversarial pass: argue the opposite side.
+        //  - The opposite label with clear proof is a real disagreement, so the finding goes to review.
+        //  - NEEDS REVIEW means no proof for the opposite side was found, so the first verdict stands.
+        //  - Agreement keeps the verdict as well.
         Llm second = parse(chat.ask(prompt(in, true, v.label())));
-        if (second == null || !v.label().equals(second.label()))
-            return new Verdict(NR, v.confidence(), "AI two-pass", "the second, opposing review did not agree with the first verdict");
+        if (second == null || second.label().equals(NR))
+            return new Verdict(v.label(), v.confidence(), "AI two-pass, no opposing proof found", v.rationale());
+        if (!v.label().equals(second.label()))
+            return new Verdict(NR, v.confidence(), "AI two-pass", "the second, opposing review found the opposite label; the finding needs manual review");
         return new Verdict(v.label(), v.confidence(), "AI two-pass agree, quote verified", v.rationale());
     }
 
@@ -237,7 +255,7 @@ public final class Triage {
       + "1) Restate the exact claim of the finding in one sentence.\n"
       + "2) Note what the evidence shows: status code, content type, where the input appears, and whether it is encoded.\n"
       + "3) Ask what an attacker needs: no login or a low-privilege account, a victim's action, or cross-origin access.\n"
-      + "4) Decide. Prefer NEEDS REVIEW when the evidence is one response with no comparison, or when the condition is only plausible.\n"
+      + "4) Decide. Choose TRUE POSITIVE or FALSE POSITIVE when a quoted line in the evidence shows the condition, or its absence, directly. Choose NEEDS REVIEW only when the evidence shows neither.\n"
       + "5) Name the one check that would confirm or refute the finding. Use high confidence only when a quoted line shows the condition directly.\n";
 
     /** Category-specific questions the model must answer, so small models do not judge every finding the same way. */
