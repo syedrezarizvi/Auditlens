@@ -21,12 +21,12 @@ For the design, read [Architecture](ARCHITECTURE.md).
 
 ## 1. Installation
 
-1. Install [Ollama](https://ollama.com) and pull a model that supports tool calling. Smaller models respond faster
-   on ordinary hardware. Example:
+1. Choose a model provider. The default is **Burp AI**, which needs Burp AI enabled with credits and no extra install.
+   To use a local model instead, install [Ollama](https://ollama.com) and pull a model that supports tool calling. Example:
    ```
-   ollama pull qwen2.5-coder:3b
+   ollama pull gpt-oss:20b
    ```
-2. Confirm the server is running (default `http://127.0.0.1:11434`).
+2. If you use Local Ollama, confirm the server is running (default `http://127.0.0.1:11434`).
 3. In Burp Suite, open **Extensions → Installed → Add**. Set **Extension type** to *Java* and select `AuditLens.jar`.
 4. A new **AuditLens** tab appears in the top-level tab bar.
 

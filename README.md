@@ -37,15 +37,16 @@ by your own Ollama instance, so no engagement data leaves your machine.
 | Java | 17 or later (the extension is compiled with `--release 17`) |
 | Burp AI | Enabled in Burp, with credits available (the default provider) |
 | Ollama (optional) | A local or loopback Ollama server with a model that supports tool calling |
-| Hardware | Model size drives the speed. Smaller models (3B–8B) run on a typical 16 GB laptop. Larger models may time out. |
+| Hardware | Model size drives speed and memory. `gpt-oss:20b` (about 14 GB) fits a 16 GB machine. `qwen3.8:27b` (about 18 GB) suits a 24 GB GPU or a 32 GB Mac. Models under about 8B are weaker at false-positive triage. |
 
 ## Quick start
 
-1. **Install Ollama** from [ollama.com](https://ollama.com) and pull a model, for example:
+1. **Choose a model provider.** By default AuditLens uses **Burp AI**, which needs Burp AI enabled with credits and no extra install.
+   To use a local model instead, install [Ollama](https://ollama.com) and pull a tool-calling model, for example:
    ```
-   ollama pull qwen2.5-coder:3b
+   ollama pull gpt-oss:20b
    ```
-2. **Download** `AuditLens.jar` from the project's Releases page (or build it, see below).
+2. **Get `AuditLens.jar`.** Build it from source (see *Building from source* below). Prebuilt releases will be listed on the Releases page once one is published.
 3. In Burp: **Extensions → Add → Extension type: Java → select `AuditLens.jar`.**
 4. Open the **AuditLens** tab → **Settings**, click *Refresh models*, pick your model, and save.
 5. **Add your target to Burp's Target scope.** The agent cannot read or send anything outside scope.
@@ -131,6 +132,8 @@ Read [Architecture → Control layer](docs/ARCHITECTURE.md#6-control-layer) for 
 - **Enforcement lives in the extension**, not in Burp's core. A bug in AuditLens could weaken its own controls. For sensitive targets, use Strict mode.
 - **Scanner features depend on your Burp edition.** Where a feature is unavailable, AuditLens logs it and continues.
 - **The active scanner is a first pass.** Its checks use signatures and response comparison. They are not a substitute for manual testing.
+- **Not yet tested in a live Burp Suite.** The release jar has been built and unit-tested with stubbed Montoya objects. Burp AI behaviour (message format, quotas and JSON reliability) has not been tested against a live account.
+- **Ollama HTTP path.** The Ollama client uses Java's `java.net.http` rather than Burp's networking API. Burp AI, the default provider, goes through `api.ai()`.
 
 ## Responsible use
 
