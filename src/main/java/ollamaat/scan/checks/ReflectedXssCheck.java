@@ -26,8 +26,6 @@ public final class ReflectedXssCheck implements ScanCheck {
     public List<ScanFinding> run(HttpRequestResponse baseline, CheckContext ctx) {
         List<ScanFinding> out = new ArrayList<>();
         if (!baseline.hasResponse()) return out;
-        String ct = Fmt.contentType(baseline.response());
-        if (!ct.isEmpty() && !ct.contains("html") && !ct.contains("xml")) return out; // JSON/text reflection isn't HTML-exploitable here
 
         for (ParsedHttpParameter p : ParamUtil.mutable(baseline)) {
             if (ctx.cancelled()) break;
@@ -37,7 +35,9 @@ public final class ReflectedXssCheck implements ScanCheck {
             var r = ctx.send(req, "XSS probe on '" + p.name() + "' at " + baseline.request().url());
             if (!r.ok()) continue;
             String body = r.rr().response().bodyToString();
-            if (body.contains(probe)) {
+            // Judge HTML context from the PROBE response, not the captured baseline (which may have been a redirect
+            // or a differently-typed response). Report only when the marker comes back unescaped in an HTML response.
+            if (body.contains(probe) && isHtml(Fmt.contentType(r.rr().response()), body)) {
                 String ref = ctx.evidence.addAgent(r.rr());
                 out.add(ScanFinding.of(id(), "Reflected XSS via '" + p.name() + "'", "high", "firm", baseline.request().url(),
                         "The value of parameter '" + p.name() + "' is reflected unescaped in an HTML response. Probe marker `" + probe
@@ -49,5 +49,15 @@ public final class ReflectedXssCheck implements ScanCheck {
             }
         }
         return out;
+    }
+
+    /** HTML context by declared content-type, or (when the type is missing/generic) by the body actually looking
+     *  like an HTML document. Keeps the finding to genuinely HTML-rendered responses, where reflection is exploitable. */
+    private static boolean isHtml(String ct, String body) {
+        if (ct.contains("html") || ct.contains("xml")) return true;
+        if (!ct.isEmpty() && !ct.contains("octet-stream")) return false; // a declared non-HTML type (json, plain, ...) is not exploitable here
+        String head = body.length() > 512 ? body.substring(0, 512) : body;
+        head = head.toLowerCase();
+        return head.contains("<!doctype html") || head.contains("<html") || head.contains("<body") || head.contains("<head");
     }
 }

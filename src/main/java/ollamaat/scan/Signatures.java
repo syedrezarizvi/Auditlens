@@ -14,7 +14,17 @@ public final class Signatures {
     // ---- SQL error fingerprints (vendor-agnostic sample; deliberately not exhaustive) ----
     public static final Pattern SQL_ERROR = Pattern.compile("(?i)(sql syntax|unclosed quotation mark|quoted string not properly terminated|"
             + "pg::syntaxerror|psqlexception|sqlite3::|sqlstate\\[|ora-\\d{5}|microsoft ole db provider|odbc (?:sql|driver)|sqlexception|"
-            + "pdoexception|mysql_fetch|mysqli_|com\\.mysql\\.jdbc|System\\.Data\\.SqlClient|npgsql\\.|sequelize)");
+            + "pdoexception|mysql_fetch|mysqli_|com\\.mysql\\.jdbc|System\\.Data\\.SqlClient|npgsql\\.|sequelize|"
+            // MSSQL (testfire/AltoroMutual and other IIS/.NET apps)
+            + "incorrect syntax near|unclosed quotation mark after the character string|conversion failed when converting|"
+            + "microsoft sql (?:server|native client)|\\[sql server\\]|syntax error converting|"
+            // MySQL / MariaDB
+            + "warning.{0,40}\\bmysql|valid mysql result|you have an error in your sql syntax|supplied argument is not a valid mysql|"
+            // PostgreSQL
+            + "syntax error at or near|unterminated quoted string|pg_query\\(|pg_exec\\(|"
+            // Oracle / DB2 / Sybase / Informix / generic JDBC
+            + "ora-\\d{4,5}|oracle error|quoted string not properly|db2 sql error|sqlcode|dynamic sql error|"
+            + "sybase message|com\\.ibm\\.db2|java\\.sql\\.sqlexception|jdbcexception|hibernate)");
 
     public static final Pattern SERVER_ERROR_SIGNATURE = Pattern.compile("(?i)(exception|traceback \\(most recent|stack trace|at [a-zA-Z0-9_.$]+\\([A-Za-z]+\\.java:\\d+\\)|"
             + "fatal error|unhandled exception|internal server error|whitelabel error page)");

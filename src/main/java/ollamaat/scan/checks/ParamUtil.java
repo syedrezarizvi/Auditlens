@@ -16,8 +16,10 @@ public final class ParamUtil {
 
     public static List<ParsedHttpParameter> mutable(HttpRequestResponse baseline) {
         List<ParsedHttpParameter> out = new ArrayList<>();
+        // A blank-valued parameter (e.g. ?query= or an empty form field) is still a real injection point, so it is
+        // tested too — the probe payload simply replaces the empty value. Skipping these was missing obvious XSS/SQLi.
         for (ParsedHttpParameter p : baseline.request().parameters())
-            if ((p.type() == HttpParameterType.URL || p.type() == HttpParameterType.BODY) && !p.value().isBlank())
+            if (p.type() == HttpParameterType.URL || p.type() == HttpParameterType.BODY)
                 out.add(p);
         return out;
     }

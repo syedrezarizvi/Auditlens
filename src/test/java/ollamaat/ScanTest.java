@@ -53,9 +53,14 @@ public class ScanTest {
         System.out.println("Signatures: SQL error fingerprints");
         for (String s : List.of("You have an error in your SQL syntax", "unclosed quotation mark after the character string",
                 "PG::SyntaxError: ERROR", "SQLite3::SQLException", "ORA-00933: SQL command not properly ended",
-                "System.Data.SqlClient.SqlException", "PDOException: SQLSTATE[42000]"))
-            check(Signatures.SQL_ERROR.matcher(s).find(), "matches: " + s.substring(0, Math.min(30, s.length())));
+                "System.Data.SqlClient.SqlException", "PDOException: SQLSTATE[42000]",
+                // broadened coverage: MSSQL (testfire/AltoroMutual), MySQL, PostgreSQL, DB2
+                "Incorrect syntax near ')'", "Microsoft SQL Server", "[SQL Server]Unclosed quotation mark",
+                "Conversion failed when converting the varchar value", "Warning: mysql_query()", "valid MySQL result",
+                "syntax error at or near \"'\"", "unterminated quoted string at or near", "DB2 SQL error: SQLCODE"))
+            check(Signatures.SQL_ERROR.matcher(s).find(), "matches: " + s.substring(0, Math.min(34, s.length())));
         check(!Signatures.SQL_ERROR.matcher("Welcome to the site, here is your search result").find(), "no false positive on benign text");
+        check(!Signatures.SQL_ERROR.matcher("Please enter a valid email address").find(), "no false positive on 'valid' in benign text");
 
         System.out.println("Signatures: parameter-name heuristics");
         for (String n : List.of("file", "filename", "template_path", "doc", "lang")) check(Signatures.FILE_PARAM.matcher(n).find(), "file-param: " + n);
@@ -69,6 +74,17 @@ public class ScanTest {
         check(Signatures.DIRECTORY_LISTING.matcher("<title>Index of /uploads</title>").find(), "directory listing detected");
         check(Signatures.SERVER_ERROR_SIGNATURE.matcher("Traceback (most recent call last): File \"app.py\"").find(), "stack trace detected");
         check(!Signatures.SERVER_ERROR_SIGNATURE.matcher("<h1>404 Not Found</h1>").find(), "plain 404 page not flagged as a stack trace");
+
+        System.out.println("Policy.parseLenient: probe URLs with payload characters are still parseable (not blocked)");
+        for (String u : List.of(
+                "https://demo.test/search.jsp?query=test<oatabc123>",      // reflected-XSS marker
+                "https://demo.test/search.jsp?query=test' AND '1'='1",     // boolean-SQLi condition (has spaces)
+                "https://demo.test/page?q=a\"b{c}|d")) {                    // other URI-illegal characters
+            java.net.URI parsed = ollamaat.agent.Policy.parseLenient(u);
+            check(parsed != null && "demo.test".equals(parsed.getHost()),
+                    "parseLenient keeps host for probe URL: " + u.substring(0, Math.min(46, u.length())));
+        }
+        check(ollamaat.agent.Policy.parseLenient("https://ok.test/clean?x=1") != null, "parseLenient still parses a clean URL");
 
         System.out.println("ActiveScanEngine: check catalogue");
         List<ScanCheck> all = ActiveScanEngine.allChecks();

@@ -63,9 +63,12 @@ public final class Policy {
         if (!rs.allowNetwork) return Decision.block("this run is read-only (no network access)");
 
         String url = n.url();
-        URI u;
-        try { u = URI.create(url); } catch (RuntimeException e) { return Decision.block("invalid URL"); }
-        if (u.getHost() == null || !(url.startsWith("http://") || url.startsWith("https://")))
+        // Parse leniently: active-scan probes legitimately put characters like '<', '>' or spaces (XSS markers,
+        // boolean-SQLi conditions) into the query. Burp sends those fine, so the gate must not reject them as an
+        // "invalid URL" — that would silently block every injection probe. Only the host is needed for the checks
+        // below; percent-encoding the offending characters for parsing does not change what is actually sent.
+        URI u = parseLenient(url);
+        if (u == null || u.getHost() == null || !(url.startsWith("http://") || url.startsWith("https://")))
             return Decision.block("only absolute http(s) URLs are allowed");
 
         // 1. Hard scope gate: Burp's target scope is the only source of truth.
@@ -110,6 +113,23 @@ public final class Policy {
 
     private static String urlPathAndQuery(URI u) {
         return (u.getPath() == null ? "" : u.getPath()) + "?" + (u.getQuery() == null ? "" : u.getQuery());
+    }
+
+    /** URI.create() rejects characters that are illegal in a raw URI (space, &lt;, &gt;, ", etc.), but active-scan
+     *  probes routinely include them and Burp sends them without complaint. Parse strictly first; on failure,
+     *  percent-encode just those characters and retry, so host/path parsing succeeds without altering the real
+     *  request. Returns null only if it still cannot be parsed. */
+    public static URI parseLenient(String url) {
+        if (url == null) return null;
+        try { return URI.create(url); } catch (RuntimeException ignored) { }
+        StringBuilder sb = new StringBuilder(url.length() + 16);
+        for (int i = 0; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (c <= 0x20 || c == 0x7F || "<>\"{}|\\^`".indexOf(c) >= 0)
+                sb.append('%').append(String.format("%02X", c & 0xFF));
+            else sb.append(c);
+        }
+        try { return URI.create(sb.toString()); } catch (RuntimeException e) { return null; }
     }
 
     public static List<String> validatePatterns(String text) {
