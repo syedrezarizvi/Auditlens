@@ -25,9 +25,15 @@ public final class ParamUtil {
     }
 
     public static HttpRequest withValue(HttpRequestResponse baseline, ParsedHttpParameter p, String newValue) {
+        // Burp inserts URL- and form-parameter values verbatim; it does NOT percent-encode them. A probe value with
+        // raw '<', '>' or spaces (XSS markers, boolean-SQLi conditions) therefore goes on the wire unencoded, and a
+        // strict server (e.g. Tomcat/Apache-Coyote, which demo.testfire.net runs) rejects the whole request with
+        // 400 Bad Request before the application sees it — so nothing reflects and no injection is ever detected.
+        // Percent-encode the value so the request is well-formed; the server decodes it back to the real payload.
+        String encoded = java.net.URLEncoder.encode(newValue, java.nio.charset.StandardCharsets.UTF_8);
         HttpParameter hp = p.type() == HttpParameterType.BODY
-                ? HttpParameter.bodyParameter(p.name(), newValue)
-                : HttpParameter.urlParameter(p.name(), newValue);
+                ? HttpParameter.bodyParameter(p.name(), encoded)
+                : HttpParameter.urlParameter(p.name(), encoded);
         return baseline.request().withParameter(hp);
     }
 }
