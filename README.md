@@ -146,7 +146,7 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) fir
 
 ## License
 
-No license has been chosen yet. Until the maintainer adds a `LICENSE` file, all rights are reserved by the author.
+AuditLens is released under the [MIT License](LICENSE) — © 2026 Syed Reza Rizvi. You are free to use, modify and redistribute it with attribution.
 
 ## Acknowledgements
 
