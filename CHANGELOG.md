@@ -11,6 +11,12 @@ grouped by the development build they shipped in (`patched-vN`). The newest buil
 ### Added
 - **Triage selected (AI)** button on the Findings tab. It runs the AI false-positive check on the selected rows only. The right-click item *Re-check selected with AI* does the same.
 
+### Changed — BApp Store readiness
+- **Declare AI support (`enhancedCapabilities()` → `AI_FEATURES`).** Without this flag Burp keeps `api.ai()` disabled, so Burp AI (the default provider) never worked and the per-extension "Use AI" checkbox never appeared. Required by the BApp Store AI extension best practices. The Burp AI "not enabled" message now points to the exact checkbox.
+- **Clean unload.** `stop()` now advances the run id so the triage and proxy-review background loops exit promptly on cancel or extension unload (they already checked it; `stop()` didn't signal it). Short UI worker threads now run on daemon threads so they can't pile up across reloads.
+- **Cope with large projects.** The in-memory evidence store is now bounded (LRU-evicted, 2000 handles) so a long engagement can't grow the heap without limit, and the site-map fallback walk is capped so a huge site map can't cause a long synchronous scan.
+- **GUI parenting.** The agent "investigate" prompt is now parented to the Burp suite frame instead of a null parent, so it appears on the correct monitor.
+
 ### Fixed
 - **Active-scan SQLi/XSS probes were silently blocked, so injection was never detected.** The policy gate validated every probe URL with `URI.create()`, which rejects the characters injection payloads rely on — `<`/`>` (XSS markers) and spaces (boolean-SQLi conditions) — as an "invalid URL", so the probe was never sent. The gate now parses probe URLs leniently (percent-encoding those characters only for its own validation, never changing the request that is sent).
 - **Injection checks now test blank-valued parameters** (`?query=` or an empty form field is still an injection point; these were skipped entirely before).

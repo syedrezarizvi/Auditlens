@@ -1,6 +1,7 @@
 package ollamaat;
 
 import burp.api.montoya.BurpExtension;
+import burp.api.montoya.EnhancedCapability;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.Registration;
 import burp.api.montoya.http.message.HttpRequestResponse;
@@ -23,6 +24,16 @@ public class AuditLens implements BurpExtension {
     private MontoyaApi api;
     private Engine engine;
     private MainPanel panel;
+
+    /**
+     * Declare AI support. Without this flag Burp keeps {@code api.ai()} disabled, so Burp AI — AuditLens's default
+     * provider — would never work and the per-extension "Use AI" checkbox would not appear. Required by the BApp
+     * Store AI extension best practices.
+     */
+    @Override
+    public java.util.Set<EnhancedCapability> enhancedCapabilities() {
+        return java.util.Set.of(EnhancedCapability.AI_FEATURES);
+    }
 
     @Override
     public void initialize(MontoyaApi api) {
@@ -68,7 +79,7 @@ public class AuditLens implements BurpExtension {
             });
             JMenuItem test = new JMenuItem("Investigate with agent…");
             test.addActionListener(e -> {
-                String t = JOptionPane.showInputDialog(null, "What should the agent investigate?",
+                String t = JOptionPane.showInputDialog(api.userInterface().swingUtils().suiteFrame(), "What should the agent investigate?",
                         "Test the selected requests for broken access control and parameter handling weaknesses using minimal, non-destructive probes.");
                 if (t != null && !t.isBlank()) { panel.addContext(items); panel.startRun(t, false); }
             });

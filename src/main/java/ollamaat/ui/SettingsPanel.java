@@ -137,7 +137,7 @@ public final class SettingsPanel extends JPanel {
     private void refreshModels() {
         save();
         info.setText("Contacting Ollama…");
-        new Thread(() -> {
+        Ui.bg(() -> {
             try {
                 List<String> models = engine.llm.listModels();
                 SwingUtilities.invokeLater(() -> {
@@ -149,17 +149,17 @@ public final class SettingsPanel extends JPanel {
                     info.setText(models.size() + " model(s) found. Remember to Save.");
                 });
             } catch (Exception ex) { SwingUtilities.invokeLater(() -> info.setText("Error: " + ex.getMessage())); }
-        }, "AuditLens-models").start();
+        }, "AuditLens-models");
     }
 
     private void testConnection() {
         info.setText("Testing…");
-        new Thread(() -> {
+        Ui.bg(() -> {
             try {
                 String v = engine.llm.version();
                 int n = engine.llm.listModels().size();
                 SwingUtilities.invokeLater(() -> info.setText("OK: " + v + (n > 0 ? ", " + n + " model(s)." : ".")));
             } catch (Exception ex) { SwingUtilities.invokeLater(() -> info.setText("Error: " + ex.getMessage())); }
-        }, "AuditLens-test").start();
+        }, "AuditLens-test");
     }
 }

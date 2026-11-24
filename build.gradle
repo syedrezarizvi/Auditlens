@@ -18,7 +18,7 @@ jar {
 // Dependency-free tests (plain main classes, no JUnit needed). Keep this list in step with build.sh.
 ['SelfTest', 'SmokeTest', 'ScanTest', 'SyncTest', 'ExcelTest', 'ReviewerInitTest', 'UrlCheckTest',
  'TriageTest', 'TriageRulesTest', 'ExcelMultiSheetTest', 'CvssTest', 'FalsePositiveTest',
- 'LlmBackendTest', 'EvidenceHostTest', 'ReportFileNameTest'].each { n ->
+ 'LlmBackendTest', 'EvidenceHostTest', 'ReportFileNameTest', 'ComplianceTest'].each { n ->
     tasks.register("run$n", JavaExec) {
         dependsOn testClasses
         classpath = sourceSets.test.runtimeClasspath

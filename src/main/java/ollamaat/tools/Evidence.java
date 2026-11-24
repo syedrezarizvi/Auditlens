@@ -8,7 +8,6 @@ import ollamaat.agent.ToolException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -17,7 +16,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Evidence {
     private final MontoyaApi api;
-    private final Map<String, HttpRequestResponse> items = new ConcurrentHashMap<>();
+    /** Cap on retained agent/selected message handles, so a long engagement with many findings cannot grow the
+     *  heap without bound (BApp criterion: cope with large projects). The oldest handles are evicted first; an
+     *  evicted ref simply resolves as unknown, and callers fall back to the site map. */
+    private static final int MAX_ITEMS = 2000;
+    private final Map<String, HttpRequestResponse> items = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, HttpRequestResponse> e) {
+                    return size() > MAX_ITEMS;
+                }
+            });
     private final AtomicInteger agentSeq = new AtomicInteger(), selSeq = new AtomicInteger();
     private volatile long cachedAt;
     private volatile List<ProxyHttpRequestResponse> cachedList = List.of();

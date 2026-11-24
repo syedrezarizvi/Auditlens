@@ -103,6 +103,9 @@ public final class Engine {
     public void unload() { stop(); for (Runnable r : unloadHooks) try { r.run(); } catch (RuntimeException ignored) { } }
 
     public void stop() {
+        // Advancing the run id makes the triage and proxy-review loops (which check `id != currentRun`) exit, so a
+        // background run stops promptly on cancel or on extension unload rather than running to completion.
+        currentRun = runSeq.incrementAndGet();
         Agent a = active;
         if (a != null) a.cancel();
         ActiveScanEngine s = activeScan;
@@ -396,8 +399,10 @@ public final class Engine {
         if (url == null || url.isBlank()) return out;
         String want = pathOnly(url);
         try {
+            // Bound the walk: the site map can be very large on a long engagement, and we only need a few matches.
+            int examined = 0;
             for (HttpRequestResponse rr : api.siteMap().requestResponses()) {
-                if (out.size() >= max) break;
+                if (out.size() >= max || ++examined > 20_000) break;
                 if (!rr.hasResponse() || rr.request() == null) continue;
                 if (pathOnly(rr.request().url()).equalsIgnoreCase(want)) out.add(rr);
             }

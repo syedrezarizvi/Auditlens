@@ -305,13 +305,13 @@ public final class MainPanel extends JPanel {
         JButton report = new JButton("Generate report (HTML / Excel)…");
         report.addActionListener(e -> ReportDialog.showAndSave(this, engine));
         JButton sync = new JButton("Sync [AI] issues from Burp");
-        Runnable doSync = () -> new Thread(() -> {
+        Runnable doSync = () -> Ui.bg(() -> {
             int n = engine.syncFindingsFromBurp();
             String st = engine.memory.findings().size() + " finding(s)" + (n > 0 ? " (+" + n + " imported from Burp issues)" : "")
                     + ".  " + engine.passiveStatus();
             // Don't overwrite the live progress/result line while an AI review is running; just refresh the table.
             SwingUtilities.invokeLater(() -> { if (!reviewActive.get()) findingsStatus.setText(st); m.fireTableDataChanged(); });
-        }, "AuditLens-findings-sync").start();
+        }, "AuditLens-findings-sync");
         sync.addActionListener(e -> doSync.run());
 
         JButton importBurp = new JButton("Import Burp issues");
@@ -319,7 +319,7 @@ public final class MainPanel extends JPanel {
         importBurp.addActionListener(e -> {
             importBurp.setEnabled(false);
             findingsStatus.setText("Importing Burp issues…");
-            new Thread(() -> {
+            Ui.bg(() -> {
                 int n = engine.importBurpIssues(false);
                 SwingUtilities.invokeLater(() -> {
                     importBurp.setEnabled(true);
@@ -327,7 +327,7 @@ public final class MainPanel extends JPanel {
                         findingsStatus.setText(engine.memory.findings().size() + " finding(s) total. Imported " + n + " new from Burp.");
                     m.fireTableDataChanged();
                 });
-            }, "AuditLens-import-burp").start();
+            }, "AuditLens-import-burp");
         });
 
         JButton fpAnalyze = new JButton("AI false-positive analysis");
@@ -454,12 +454,12 @@ public final class MainPanel extends JPanel {
         java.util.List<Memory.Finding> sel = selectedFindings(table);
         if (sel.isEmpty()) { findingsStatus.setText("Select one or more findings first."); return; }
         findingsStatus.setText("Sending " + sel.size() + " finding(s) to Burp Repeater…");
-        new Thread(() -> {
+        Ui.bg(() -> {
             int n = engine.sendToRepeater(sel);
             SwingUtilities.invokeLater(() -> findingsStatus.setText(n == 0
                     ? "Nothing sent: the selected findings have no captured request or URL."
                     : "Sent " + n + " finding(s) to Burp Repeater. Validate there and note the outcome."));
-        }, "AuditLens-repeater").start();
+        }, "AuditLens-repeater");
     }
 
     private void reCheckSelected(JTable table) {

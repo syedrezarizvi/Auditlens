@@ -47,6 +47,7 @@ public final class BurpAiBackend implements LlmBackend {
 
     private void requireEnabled() throws IOException {
         if (!prompter.enabled())
-            throw new IOException("Burp AI is not enabled. Enable it in Burp's settings, or choose Local Ollama in AuditLens > Settings.");
+            throw new IOException("Burp AI is not enabled for AuditLens. Tick the \"Use AI\" checkbox for AuditLens in "
+                    + "Extensions > Installed (it needs Burp AI credits), or choose Local Ollama in AuditLens > Settings.");
     }
 }
